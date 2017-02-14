@@ -28,6 +28,8 @@
 #
 # Author: Dan Bailey
 
+# Running as private CI project.
+
 # OpenVDB requires Ubuntu Trusty 14.04 or later which Travis does not yet
 # support using the faster Container-based infrastructure
 # (https://docs.travis-ci.com/user/ci-environment/#Virtualization-environments)
