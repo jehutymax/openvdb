@@ -55,9 +55,12 @@
 #include <SYS/SYS_Math.h>
 
 #include <boost/algorithm/string/join.hpp>
-#include <boost/math/special_functions/round.hpp>
 
+#include <limits>
 #include <list>
+#include <memory>
+#include <string>
+#include <vector>
 
 #if (UT_VERSION_INT >= 0x0c050000) // 12.5.0 or later
 #define HAVE_POLYSOUP 1
@@ -293,7 +296,6 @@ Polygon Soup:\n\
     parms.add(hutil::ParmFactory(PRM_TOGGLE, "computenormals", "Compute Vertex Normals")
         .setTooltip("Compute edge-preserving vertex normals."));
 
-
     //////////
 
     // Reference input options
@@ -339,16 +341,16 @@ Polygon Soup:\n\
 
     parms.add(hutil::ParmFactory(PRM_STRING, "seampoints", "Seam Points")
         .setDefault("seam_points")
-        .setTooltip("When converting to polygons with a second input, this "
-            "specifies a group of the fracture seam points. This can be "
-            "used to drive local pre-fracture dynamics e.g. local surface buckling."));
+        .setTooltip(
+            "When converting to polygons with a second input, this specifies"
+            " a group of the fracture seam points. This can be used to drive"
+            " local pre-fracture dynamics such as local surface buckling."));
 
     //////////
 
     // Mask input options
 
-
-   parms.add(hutil::ParmFactory(PRM_TOGGLE, "surfacemask", "")
+    parms.add(hutil::ParmFactory(PRM_TOGGLE, "surfacemask", "")
         .setDefault(PRMoneDefaults)
         .setTypeExtended(PRM_TYPE_TOGGLE_JOIN)
         .setTooltip("Enable / disable the surface mask"));
@@ -374,8 +376,6 @@ Polygon Soup:\n\
         .setTooltip(
             "A single scalar grid used as a spatial multiplier for the adaptivity threshold")
         .setChoiceList(&hutil::PrimGroupMenuInput3));
-
-
 
     //////////
 
@@ -603,10 +603,9 @@ convertVDBClass(
             std::vector<Vec3s> points;
             points.reserve(mesher.pointListSize());
             for (size_t i = 0, n = mesher.pointListSize(); i < n; i++) {
-                // The MeshToVolume conversion further down, requires the
+                // The MeshToVolume conversion, further down, requires the
                 // points to be in grid index space.
-                points.push_back(
-                    transform->worldToIndex(mesher.pointList()[i]));
+                points.push_back(transform->worldToIndex(mesher.pointList()[i]));
             }
 
             openvdb::tools::PolygonPoolList& polygonPoolList = mesher.polygonPoolList();
@@ -991,22 +990,22 @@ struct GridCopyOp
                 return OutGridPtrT{};
             }
         }
-        auto outGrid = OutGridT::create(newTree);
-        outGrid->insertMeta(*inGrid.copyMeta());
-        outGrid->setTransform(inGrid.transform().copy());
+        auto newGrid = OutGridT::create(newTree);
+        newGrid->insertMeta(*inGrid.copyMeta());
+        newGrid->setTransform(inGrid.transform().copy());
         if ((outType != UT_VDB_FLOAT) && (outType != UT_VDB_DOUBLE)
-            && (outGrid->getGridClass() == openvdb::GRID_LEVEL_SET))
+            && (newGrid->getGridClass() == openvdb::GRID_LEVEL_SET))
         {
             // If the output grid is not floating-point scalar, then it can't be a level set.
-            outGrid->setGridClass(openvdb::GRID_UNKNOWN);
+            newGrid->setGridClass(openvdb::GRID_UNKNOWN);
         }
         if ((UTvdbGetGridTupleSize(outType) != 1)
-            && (outGrid->getGridClass() == openvdb::GRID_FOG_VOLUME))
+            && (newGrid->getGridClass() == openvdb::GRID_FOG_VOLUME))
         {
             // If the output grid is not scalar, then it can't be a fog volume.
-            outGrid->setGridClass(openvdb::GRID_UNKNOWN);
+            newGrid->setGridClass(openvdb::GRID_UNKNOWN);
         }
-        return outGrid;
+        return newGrid;
     }
 
     template<typename GridT>
@@ -1071,7 +1070,7 @@ SOP_OpenVDB_Convert::updateParmsFlags()
     changed |= enableParm("fogisovalue", toOpenVDB && toSDF);
 
     if (toOpenVDB) {
-        changed |= enableParm("tolerance", evalInt("prune",  0, time));
+        changed |= enableParm("tolerance", bool(evalInt("prune",  0, time)));
     }
 
     bool refexists = (nInputs() == 2);
@@ -1138,7 +1137,7 @@ SOP_OpenVDB_Convert::updateParmsFlags()
 #if HAVE_ACTIVATEINSIDE
     changed |= setVisibleState("activateinsidesdf", toOpenVDB);
     if (toOpenVDB) {
-        changed |= enableParm("activateinsidesdf", evalInt("flood",  0, time));
+        changed |= enableParm("activateinsidesdf", bool(evalInt("flood",  0, time)));
     }
 #endif
 
@@ -1175,7 +1174,13 @@ SOP_OpenVDB_Convert::convertVDBType(
             // Create a copy of the grid, but with a different value type.
             // Store the copy as op.outGrid.
             GEOvdbProcessTypedGridTopology(*it.getPrimitive(), op);
-            if (op.outGrid) it->setGrid(*op.outGrid);
+            if (op.outGrid) {
+                auto& grid = *op.outGrid;
+                grid.removeMeta("value_type");
+                grid.insertMeta("value_type", openvdb::StringMetadata(grid.valueType()));
+                it->setGrid(grid);
+                it->syncAttrsFromMetadata();
+            }
         }
     }
 }
@@ -1221,10 +1226,10 @@ SOP_OpenVDB_Convert::referenceMeshing(
 
     openvdb::tools::MeshToVoxelEdgeData edgeData;
 
-    boost::shared_ptr<GU_Detail> geoPtr;
+    std::unique_ptr<GU_Detail> geoPtr;
     if (!refGrid) {
         std::string warningStr;
-        geoPtr = hvdb::validateGeometry(*refGeo, warningStr, &boss);
+        geoPtr = hvdb::convertGeometry(*refGeo, warningStr, &boss);
 
         if (geoPtr) {
             refGeo = geoPtr.get();
