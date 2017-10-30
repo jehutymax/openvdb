@@ -87,6 +87,9 @@
 # The directory into which to install libraries, executables and header files
 DESTDIR := /tmp/OpenVDB
 
+# The directory into which to install libraries (e.g., for Linux multiarch support)
+DESTDIR_LIB_DIR := $(DESTDIR)/lib
+
 # The parent directory of the boost/ header directory
 BOOST_INCL_DIR := $(HT)/include
 # The directory containing libboost_iostreams, libboost_system, etc.
@@ -353,6 +356,7 @@ INCLUDE_NAMES := \
     points/PointDataGrid.h \
     points/PointDelete.h \
     points/PointGroup.h \
+    points/PointScatter.h \
     points/StreamCompression.h \
     tools/ChangeBackground.h \
     tools/Clip.h \
@@ -519,6 +523,7 @@ UNITTEST_SRC_NAMES := \
     unittest/TestPointGroup.cc \
     unittest/TestPointIndexGrid.cc \
     unittest/TestPointPartitioner.cc \
+    unittest/TestPointScatter.cc \
     unittest/TestPointsToMask.cc \
     unittest/TestPoissonSolver.cc \
     unittest/TestPotentialFlow.cc \
@@ -658,7 +663,7 @@ else
 LIBOPENVDB_SHARED_NAME := $(LIBOPENVDB_NAME).dylib
 LIBOPENVDB_SHARED := $(LIBOPENVDB_NAME).$(LIB_VERSION).dylib
 LIBOPENVDB_SONAME := $(LIBOPENVDB_NAME).$(SO_VERSION).dylib
-LIBOPENVDB_SONAME_FLAGS := -Wl,-install_name,$(DESTDIR)/lib/$(LIBOPENVDB_SONAME)
+LIBOPENVDB_SONAME_FLAGS := -Wl,-install_name,$(DESTDIR_LIB_DIR)/$(LIBOPENVDB_SONAME)
 endif
 
 # TODO: libopenvdb_viewer is currently built into vdb_view and is not installed separately.
@@ -673,7 +678,7 @@ else
 LIBVIEWER_SHARED_NAME := $(LIBVIEWER_NAME).dylib
 LIBVIEWER_SHARED := $(LIBVIEWER_NAME).$(LIB_VERSION).dylib
 LIBVIEWER_SONAME := $(LIBVIEWER_NAME).$(SO_VERSION).dylib
-LIBVIEWER_SONAME_FLAGS := -Wl,-install_name,$(DESTDIR)/lib/$(LIBVIEWER_SONAME)
+LIBVIEWER_SONAME_FLAGS := -Wl,-install_name,$(DESTDIR_LIB_DIR)/$(LIBVIEWER_SONAME)
 endif
 
 PYTHON_MODULE_NAME=pyopenvdb
@@ -689,7 +694,7 @@ ifeq (no,$(strip $(shared)))
 else
     LIBOPENVDB := $(LIBOPENVDB_SHARED)
     LIBVIEWER := $(LIBVIEWER_SHARED)
-    LIBOPENVDB_RPATH := -Wl,-rpath,$(DESTDIR)/lib
+    LIBOPENVDB_RPATH := -Wl,-rpath,$(DESTDIR_LIB_DIR)
 endif # shared
 
 DEPEND := dependencies
@@ -891,16 +896,16 @@ install_lib: lib
 	    do cp -f $$f $(DESTDIR)/include/openvdb/$$f; done
 	@echo "Copied header files to $(DESTDIR)/include"
 	@#
-	mkdir -p $(DESTDIR)/lib
-	@echo "Created $(DESTDIR)/lib/"
-	cp -f $(LIBOPENVDB) $(DESTDIR)/lib
-	pushd $(DESTDIR)/lib > /dev/null; \
+	mkdir -p $(DESTDIR_LIB_DIR)
+	@echo "Created $(DESTDIR_LIB_DIR)"
+	cp -f $(LIBOPENVDB) $(DESTDIR_LIB_DIR)
+	pushd $(DESTDIR_LIB_DIR) > /dev/null; \
 	    if [ -f $(LIBOPENVDB_SHARED) ]; then \
 	        ln -f -s $(LIBOPENVDB_SHARED) $(LIBOPENVDB_SHARED_NAME); \
 	        ln -f -s $(LIBOPENVDB_SHARED) $(LIBOPENVDB_SONAME); \
 	    fi; \
 	    popd > /dev/null
-	@echo "Copied libopenvdb to $(DESTDIR)/lib/"
+	@echo "Copied libopenvdb to $(DESTDIR_LIB_DIR)"
 
 install: install_lib python vdb_lod vdb_print vdb_render vdb_view doc pydoc
 	if [ -f $(LIBVIEWER) ]; \
@@ -909,12 +914,12 @@ install: install_lib python vdb_lod vdb_print vdb_render vdb_view doc pydoc
 	    echo "Created $(DESTDIR)/include/openvdb_viewer"; \
 	    cp -f $(LIBVIEWER_PUBLIC_INCLUDE_NAMES) $(DESTDIR)/include/openvdb_viewer/; \
 	    @echo "Copied vdb_view header files to $(DESTDIR)/include" \
-	    cp -f $(LIBVIEWER) $(DESTDIR)/lib; \
-	    pushd $(DESTDIR)/lib > /dev/null; \
+	    cp -f $(LIBVIEWER) $(DESTDIR_LIB_DIR); \
+	    pushd $(DESTDIR_LIB_DIR) > /dev/null; \
 	        if [ -f $(LIBVIEWER_SHARED) ]; then \
 	            ln -f -s $(LIBVIEWER_SHARED) $(LIBVIEWER_SHARED_NAME); fi; \
 	        popd > /dev/null; \
-	    @echo "Copied libopenvdb_viewer to $(DESTDIR)/lib/"; \
+	    @echo "Copied libopenvdb_viewer to $(DESTDIR_LIB_DIR)"; \
 	fi
 	@#
 	if [ -f $(PYTHON_MODULE) ]; \
